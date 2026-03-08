@@ -745,11 +745,11 @@ input[type=range].vert { writing-mode:vertical-lr; direction:rtl; width:3px; hei
             <button class="btn btn-play" id="playA" onclick="djToggle('A')">▶ PLAY</button>
           </div>
           <div class="loop-row" id="loopA">
-            <button class="btn btn-loop" onclick="djLoop('A',0.5)">½</button>
-            <button class="btn btn-loop" onclick="djLoop('A',1)">1</button>
-            <button class="btn btn-loop" onclick="djLoop('A',2)">2</button>
-            <button class="btn btn-loop" onclick="djLoop('A',4)">4</button>
-            <button class="btn btn-loop" onclick="djLoop('A',8)">8</button>
+            <button class="btn btn-loop" onclick="djLoop(event,'A',0.5)">½</button>
+            <button class="btn btn-loop" onclick="djLoop(event,'A',1)">1</button>
+            <button class="btn btn-loop" onclick="djLoop(event,'A',2)">2</button>
+            <button class="btn btn-loop" onclick="djLoop(event,'A',4)">4</button>
+            <button class="btn btn-loop" onclick="djLoop(event,'A',8)">8</button>
             <button class="btn btn-loop" onclick="djLoopOff('A')" style="color:var(--red)">✕</button>
           </div>
           <div class="hcue-row">
@@ -840,11 +840,11 @@ input[type=range].vert { writing-mode:vertical-lr; direction:rtl; width:3px; hei
             <button class="btn btn-cue" id="cueB" onclick="djCue('B')">CUE</button>
           </div>
           <div class="loop-row" id="loopB">
-            <button class="btn btn-loop" onclick="djLoop('B',0.5)">½</button>
-            <button class="btn btn-loop" onclick="djLoop('B',1)">1</button>
-            <button class="btn btn-loop" onclick="djLoop('B',2)">2</button>
-            <button class="btn btn-loop" onclick="djLoop('B',4)">4</button>
-            <button class="btn btn-loop" onclick="djLoop('B',8)">8</button>
+            <button class="btn btn-loop" onclick="djLoop(event,'B',0.5)">½</button>
+            <button class="btn btn-loop" onclick="djLoop(event,'B',1)">1</button>
+            <button class="btn btn-loop" onclick="djLoop(event,'B',2)">2</button>
+            <button class="btn btn-loop" onclick="djLoop(event,'B',4)">4</button>
+            <button class="btn btn-loop" onclick="djLoop(event,'B',8)">8</button>
             <button class="btn btn-loop" onclick="djLoopOff('B')" style="color:var(--red)">✕</button>
           </div>
           <div class="hcue-row">
@@ -1306,13 +1306,13 @@ function djHotcue(id,i) {
   else{d.off=d.hcues[i];if(d.playing){djStop(id);djPlay(id);}}
 }
 
-function djLoop(id,bars) {
+function djLoop(e,id,bars) {
   const d=DJ[id]; if(!d.buf||!d.bpm){toast('Need BPM');return;}
   const bl=60/d.bpm/d.pitch, ll=bl*4*bars;
   d.loopBars=bars; d.loopStart=d.playing?djTime(id):d.off;
   if(d.src){d.src.loop=true;d.src.loopStart=d.loopStart;d.src.loopEnd=d.loopStart+ll;}
   document.querySelectorAll(`#loop${id} .btn-loop`).forEach(b=>b.classList.remove('active'));
-  event.target.classList.add('active'); toast(`${bars}-bar loop`);
+  if(e&&e.target) e.target.classList.add('active'); toast(`${bars}-bar loop`);
 }
 function djLoopOff(id){const d=DJ[id];d.loopBars=null;if(d.src)d.src.loop=false;document.querySelectorAll(`#loop${id} .btn-loop`).forEach(b=>b.classList.remove('active'));}
 
@@ -1404,6 +1404,7 @@ let nextStepTime = 0;
 let seqMutes = {};
 let seqVols = {};
 let seqNodes = {};
+const seqOn = true; // Enable step preview on click
 
 // Pattern storage: patterns[patIdx][trackId][stepIdx] = {on:bool, vel:number}
 function emptyPattern() {
@@ -1655,7 +1656,6 @@ function renderSeq() {
     container.appendChild(row);
   });
 }
-const seqOn=true;
 
 // ╔══════════════════════════════════════════════════════════╗
 // ║  PIANO ROLL                                              ║
@@ -2489,7 +2489,7 @@ document.addEventListener('keydown',e=>{
     switch(e.key.toLowerCase()){
       case 'a': djToggle('A');break; case 'b': djToggle('B');break;
       case 'q': djCue('A');break; case 'w': djCue('B');break;
-      case 'z': djLoop('A',4);break; case 'x': djLoop('B',4);break;
+      case 'z': djLoop(null,'A',4);break; case 'x': djLoop(null,'B',4);break;
       case 's': djSync();break;
     }
   } else {
