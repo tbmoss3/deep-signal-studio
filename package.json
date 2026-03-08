@@ -1,0 +1,13 @@
+{
+  "name": "deep-signal-studio",
+  "version": "3.0.0",
+  "description": "Web-based DJ and AI-powered deep house music production studio",
+  "scripts": {
+    "start": "npx serve . -l $PORT"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": ["dj", "music", "deep-house", "ai", "web-audio"],
+  "license": "MIT"
+}
