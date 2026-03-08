@@ -2007,6 +2007,42 @@ function clearConsole() { document.getElementById('consoleMessages').innerHTML='
 function escHtml(t){ return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function setPrompt(id, txt) { document.getElementById(id+'Prompt').value=txt; }
 
+// Repair malformed JSON from AI responses (handles truncated numbers, missing brackets)
+function repairAndParseJSON(str) {
+  let s = str.trim();
+  // Fix truncated decimals like "0." or "0.7" at end of truncated response
+  s = s.replace(/:\s*(\d+\.)\s*([,\]\}]|$)/g, ':$10$2');
+  s = s.replace(/,\s*(\d+\.)\s*([,\]\}]|$)/g, ',$10$2');
+  // Remove trailing commas in arrays
+  s = s.replace(/,(\s*[\]\}])/g, '$1');
+  // Count brackets and add missing closers
+  const opens = (s.match(/\[/g)||[]).length;
+  const closes = (s.match(/\]/g)||[]).length;
+  const braces = (s.match(/\{/g)||[]).length;
+  const closeBraces = (s.match(/\}/g)||[]).length;
+  // Try to auto-close arrays/objects
+  if (opens > closes) {
+    // Find last incomplete array and close it
+    const lastArrayMatch = s.match(/\[[^\]]*$/);
+    if (lastArrayMatch) {
+      const partial = lastArrayMatch[0];
+      // If ends mid-number, complete with 0
+      if (/,\s*\d+\.?$/.test(partial)) s += '0';
+      for (let i = 0; i < opens - closes; i++) s += ']';
+    }
+  }
+  if (braces > closeBraces) {
+    for (let i = 0; i < braces - closeBraces; i++) s += '}';
+  }
+  try {
+    return JSON.parse(s);
+  } catch(e) {
+    // Last resort: try to extract just the pattern data with defaults
+    console.error('JSON repair failed:', e, '\nOriginal:', str);
+    throw new Error('Could not parse pattern data. Try a simpler prompt or regenerate.');
+  }
+}
+
 // ─── FREE CHAT ───
 async function sendChat() {
   const input = document.getElementById('chatInput');
@@ -2081,12 +2117,12 @@ Deep house guidelines:
 - Make it GROOVE. Less is more in deep house.`;
 
   try {
-    const raw = await callClaude([{role:'user',content:`Create a deep house pattern inspired by: "${prompt}". Make it authentic and groovy.`}], systemP, 1000);
+    const raw = await callClaude([{role:'user',content:`Create a deep house pattern inspired by: "${prompt}". Make it authentic and groovy.`}], systemP, 1500);
     removeThinking();
     if (!raw) { btn.classList.remove('loading'); btn.textContent='⚡ GENERATE PATTERN'; return; }
 
     const clean = raw.replace(/```json|```/g,'').trim();
-    const data = JSON.parse(clean);
+    const data = repairAndParseJSON(clean);
 
     // Apply to pattern
     applyPatternData(targetPat, data, steps);
