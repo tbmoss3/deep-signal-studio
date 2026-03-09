@@ -684,6 +684,39 @@ input[type=range].vert { writing-mode:vertical-lr; direction:rtl; width:3px; hei
 .fb-bar { flex:1; height:4px; background:var(--bg-inset); border-radius:2px; border:1px solid var(--border); overflow:hidden; }
 .fb-fill { height:100%; border-radius:2px; transition:width 0.5s cubic-bezier(0.16,1,0.3,1); }
 
+/* Beat Library */
+.beat-library {
+  position:absolute; top:50px; right:10px; width:280px; max-height:400px;
+  background:var(--bg-card); border:1px solid var(--green); border-radius:6px;
+  z-index:100; box-shadow:0 8px 32px rgba(0,0,0,0.5);
+}
+.beat-lib-header {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:8px 12px; background:var(--bg-inset); border-bottom:1px solid var(--border);
+  font-family:var(--font-disp); font-size:10px; color:var(--green); letter-spacing:2px;
+}
+.beat-list { max-height:340px; overflow-y:auto; padding:4px; }
+.beat-item {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:8px 10px; margin:4px 0; background:var(--bg-inset); border:1px solid var(--border);
+  border-radius:4px; cursor:pointer; transition:all 0.2s;
+}
+.beat-item:hover { border-color:var(--green); background:rgba(0,232,166,0.1); }
+.beat-item-info { flex:1; }
+.beat-item-name { font-family:var(--font-disp); font-size:11px; color:var(--white); }
+.beat-item-meta { font-size:9px; color:var(--white-dim); margin-top:2px; }
+.beat-item-actions { display:flex; gap:4px; }
+.beat-item-actions button { padding:3px 6px; font-size:8px; }
+.save-dialog {
+  position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+  background:var(--bg-card); border:2px solid var(--green); border-radius:8px;
+  padding:20px; z-index:200; min-width:300px;
+}
+.save-dialog-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:199; }
+.save-dialog h3 { margin:0 0 15px; color:var(--green); font-family:var(--font-disp); font-size:14px; }
+.save-dialog input { width:100%; padding:8px; margin-bottom:10px; background:var(--bg-inset); border:1px solid var(--border); color:var(--white); border-radius:4px; }
+.save-dialog-btns { display:flex; gap:8px; justify-content:flex-end; }
+
 </style>
 </head>
 <body>
@@ -953,7 +986,17 @@ input[type=range].vert { writing-mode:vertical-lr; direction:rtl; width:3px; hei
             <button class="btn pat-btn" onclick="loadPattern(2,this)">C</button>
             <button class="btn pat-btn" onclick="loadPattern(3,this)">D</button>
           </div>
+          <button class="btn" onclick="saveBeatDialog()" style="margin-left:12px;background:var(--green)">SAVE</button>
+          <button class="btn" onclick="toggleBeatLibrary()" style="background:var(--purple)">LIBRARY</button>
         </div>
+      </div>
+      <!-- Beat Library Panel -->
+      <div id="beatLibrary" class="beat-library" style="display:none">
+        <div class="beat-lib-header">
+          <span>SAVED BEATS</span>
+          <button class="btn" onclick="toggleBeatLibrary()" style="padding:2px 8px">X</button>
+        </div>
+        <div id="beatList" class="beat-list"></div>
       </div>
       <div class="seq-tracks" id="seqTracks"></div>
     </div>
@@ -2534,6 +2577,144 @@ document.addEventListener('keydown',e=>{
     if(e.key==='Escape') seqStop();
   }
 });
+
+// ╔══════════════════════════════════════════════════════════╗
+// ║  BEAT STORAGE API                                        ║
+// ╚══════════════════════════════════════════════════════════╝
+async function fetchBeats() {
+  try {
+    const res = await fetch('/api/beats');
+    if (!res.ok) throw new Error('Failed to load beats');
+    return await res.json();
+  } catch(e) {
+    console.log('Beat storage not available (local mode)');
+    return [];
+  }
+}
+
+async function saveBeat(name, description) {
+  const pat = seqPatterns[currentPattern];
+  const patternData = {};
+  const velocityData = {};
+  const tracks = ['kick','snare','hihat','open-hat','clap','perc1','bass','chord'];
+  tracks.forEach(id => {
+    patternData[id] = pat[id].map(s => s.on ? 1 : 0);
+    velocityData[id] = pat[id].map(s => s.vel);
+  });
+  try {
+    const res = await fetch('/api/beats', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ name, bpm: masterBPM, description, pattern: patternData, velocities: velocityData })
+    });
+    if (!res.ok) throw new Error('Save failed');
+    toast('Beat saved: ' + name);
+    loadBeatLibrary();
+    return await res.json();
+  } catch(e) {
+    toast('Save failed - database not connected');
+    return null;
+  }
+}
+
+async function loadBeatById(id) {
+  try {
+    const res = await fetch('/api/beats/' + id);
+    if (!res.ok) throw new Error('Load failed');
+    const beat = await res.json();
+    applyBeatToPattern(beat);
+    toast('Loaded: ' + beat.name);
+  } catch(e) {
+    toast('Load failed');
+  }
+}
+
+function applyBeatToPattern(beat) {
+  const pat = seqPatterns[currentPattern];
+  const tracks = ['kick','snare','hihat','open-hat','clap','perc1','bass','chord'];
+  const pattern = typeof beat.pattern === 'string' ? JSON.parse(beat.pattern) : beat.pattern;
+  const velocities = typeof beat.velocities === 'string' ? JSON.parse(beat.velocities) : beat.velocities;
+  tracks.forEach(id => {
+    for(let i=0; i<32; i++) {
+      pat[id][i].on = pattern[id]?.[i] === 1;
+      pat[id][i].vel = velocities?.[id]?.[i] ?? 0.75;
+    }
+  });
+  if (beat.bpm) {
+    masterBPM = beat.bpm;
+    document.getElementById('masterBpmInput').value = beat.bpm;
+  }
+  renderSeq();
+}
+
+async function deleteBeat(id) {
+  if (!confirm('Delete this beat?')) return;
+  try {
+    await fetch('/api/beats/' + id, { method: 'DELETE' });
+    toast('Beat deleted');
+    loadBeatLibrary();
+  } catch(e) {
+    toast('Delete failed');
+  }
+}
+
+async function loadBeatLibrary() {
+  const beats = await fetchBeats();
+  const list = document.getElementById('beatList');
+  if (beats.length === 0) {
+    list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--white-dim);font-size:10px">No saved beats yet.<br>Generate a pattern and click SAVE!</div>';
+    return;
+  }
+  list.innerHTML = beats.map(b => `
+    <div class="beat-item" onclick="loadBeatById(${b.id})">
+      <div class="beat-item-info">
+        <div class="beat-item-name">${escHtml(b.name)}</div>
+        <div class="beat-item-meta">${b.bpm} BPM · ${new Date(b.created_at).toLocaleDateString()}</div>
+      </div>
+      <div class="beat-item-actions">
+        <button class="btn" onclick="event.stopPropagation();deleteBeat(${b.id})" style="background:var(--red)">DEL</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function toggleBeatLibrary() {
+  const lib = document.getElementById('beatLibrary');
+  if (lib.style.display === 'none') {
+    lib.style.display = 'block';
+    loadBeatLibrary();
+  } else {
+    lib.style.display = 'none';
+  }
+}
+
+function saveBeatDialog() {
+  const overlay = document.createElement('div');
+  overlay.className = 'save-dialog-overlay';
+  overlay.onclick = () => { overlay.remove(); dialog.remove(); };
+  const dialog = document.createElement('div');
+  dialog.className = 'save-dialog';
+  dialog.innerHTML = `
+    <h3>SAVE BEAT</h3>
+    <input type="text" id="beatNameInput" placeholder="Beat name..." autofocus>
+    <input type="text" id="beatDescInput" placeholder="Description (optional)...">
+    <div class="save-dialog-btns">
+      <button class="btn" onclick="this.closest('.save-dialog').remove();document.querySelector('.save-dialog-overlay').remove()">CANCEL</button>
+      <button class="btn" style="background:var(--green)" onclick="doSaveBeat()">SAVE</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.body.appendChild(dialog);
+  document.getElementById('beatNameInput').focus();
+}
+
+async function doSaveBeat() {
+  const name = document.getElementById('beatNameInput').value.trim() || 'Untitled Beat';
+  const desc = document.getElementById('beatDescInput').value.trim();
+  document.querySelector('.save-dialog').remove();
+  document.querySelector('.save-dialog-overlay').remove();
+  await saveBeat(name, desc);
+}
 
 // ╔══════════════════════════════════════════════════════════╗
 // ║  TOAST                                                   ║
